@@ -3,7 +3,7 @@ module WebSocket
     , Message
     , open, Settings
     , send, close, closeWith
-    , queueSize
+    , bytesQueued
     )
     where
 {-|
@@ -12,7 +12,7 @@ module WebSocket
 @docs WebSocket, Message
 
 # Using WebSockets
-@docs open, Settings, send, close, closeWith, queueSize
+@docs open, Settings, send, close, closeWith, bytesQueued
 
 -}
 
@@ -23,13 +23,8 @@ type WebSocket = WebSocket
 
 
 {-|
-
-url - The URL to which to connect; this should be the URL to which the WebSocket server will respond.
-protocols - Either a single protocol string or an array of protocol strings. These strings are used to indicate sub-protocols, so that a single server can implement multiple WebSocket sub-protocols (for example, you might want one server to be able to handle different types of interactions depending on the specified protocol). If you don't specify a protocol string, an empty string is assumed.
-
-SECURITY_ERR - The port to which the connection is being attempted is being blocked
 -}
-open : String -> Settings -> Task SecurityError WebSocket
+open : String -> Settings -> Task BadOpen WebSocket
 open =
   Native.WebSocket.open
 
@@ -50,32 +45,23 @@ program. **Ideally this is handled by the effect library you are using though.
 Most people should not be working with this stuff directly.**
 -}
 type alias Settings =
-  { onMessage : WebSocket -> Message -> Task Never ()
+  { onMessage : WebSocket -> String -> Task Never ()
   , onClose : { code : Int, reason : String, wasClean : Bool } -> Task Never ()
   }
 
 
-{-| The WebSockets protocol in browsers allows you to send strings, blobs, and
-binary arrays. It is quite rare to use things besides strings, but it can
-happen! So in your `onMessage` handler, you need to account for all of these
-cases.
-
-**Note:** Right now there is not a native representation of blobs or binary
-arrays, so you just get a `Json.Encode.Value` that can be sent through ports
-but nothing else. This will improve as soon as blobs and binary arrays become
-part of the core `elm-lang` platform libraries.
--}
-type Message
-    = String String
-    | Blob Json.Value
-    | Binary Json.Value
+type BadOpen
+    = BadSecurity
+    | BadArgs
 
 
 {-| Close a `WebSocket`. If the connection is already closed, it does nothing.
 -}
 close : WebSocket -> Task x ()
-close ws =
-  closeWith 1000 "" ws
+close socket =
+  Task.map
+    (always ())
+    (closeWith 1000 "" socket)
 
 
 {-| Closes the `WebSocket`. If the connection is already closed, it does nothing.
@@ -91,42 +77,44 @@ In addition to providing the `WebSocket` you want to close, you must provide:
   string must be no longer than 123 bytes of UTF-8 text (not characters).
 
 -}
-closeWith : Int -> String -> WebSocket -> Task BadClose ()
+closeWith : Int -> String -> WebSocket -> Task x (Maybe BadClose)
 closeWith =
   Native.WebSocket.close
 
 
-{-|
-  INVALID_ACCESS_ERR - An invalid code was specified.
-  SYNTAX_ERR - The reason string is too long or contains unpaired surrogates.
+{-| It is possible to provide invalid codes or reasons for closing a
+connection. The connection will still be closed, but the `closeWith` function
+will give you `BadCode` if an invalid code was specified or `BadReason` if your
+reason is too long or contains unpaired surrogates.
 -}
 type BadClose
     = BadCode
     | BadReason
 
 
-{-| Transmits data to the server over the WebSocket connection.
-
-data - A text string to send to the server.
-
+{-| Send a string over the `WebSocket` to the server. If there is any problem
+with the send, you will get some data about it as the result of running this
+task.
 -}
-send : WebSocket -> String -> Task x ()
+send : WebSocket -> String -> Task x (Maybe BadSend)
 send =
   Native.WebSocket.send
 
 
-{-| INVALID_STATE_ERR - The connection is not currently OPEN.
-SYNTAX_ERR - The data is a string that has unpaired surrogates.
+{-| There are a few ways a send can go wrong. The send function will ultimately
+give you a `NotOpen` if the connection is no longer open or a `BadString` if
+the string has unpaired surrogates (badly formatted UTF-16).
 -}
 type BadSend
     = NotOpen
-    | BadMessage
+    | BadString
 
 
 {-| The number of bytes of data queued by `send` but not yet transmitted to the
-network.
+network. If you have been sending data to a closed connection, it will just
+pile up on the queue endlessly.
 -}
-queueSize : WebSocket -> Task x Int
-queueSize =
-  Native.WebSocket.queueSize
+bytesQueued : WebSocket -> Task x Int
+bytesQueued =
+  Native.WebSocket.bytesQueued
 
