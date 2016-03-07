@@ -23,13 +23,13 @@ Elm.Native.WebSocket.make = function(localRuntime) {
 			catch(err)
 			{
 				return callback(Task.fail({
-					ctor: err instanceof SecurityError ? 'BadSecurity' : 'BadArgs',
+					ctor: err.name == "SecurityError"  ? 'BadSecurity' : 'BadArgs',
 					_0: err.message
 				}));
 			}
 
 			socket.addEventListener("message", function(evt) {
-				Task.perform(settings.onMessage(evt.data));
+				Task.perform(settings.onMessage(socket)(evt.data));
 			});
 
 			socket.addEventListener("close", function(evt) {
@@ -77,7 +77,7 @@ Elm.Native.WebSocket.make = function(localRuntime) {
 			catch(err)
 			{
 				return callback(Task.fail({
-					ctor: err instanceof SyntaxError ? 'BadReason' : 'BadCode',
+					ctor: err.name == "SyntaxError" ? 'BadReason' : 'BadCode',
 					_0: err.message
 				}));
 			}
