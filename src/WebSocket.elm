@@ -1,15 +1,15 @@
 module WebSocket
     ( WebSocket
-    , Message
     , open, Settings
     , send, close, closeWith
     , bytesQueued
     )
     where
+
 {-|
 
-# WebSockets and Messages
-@docs WebSocket, Message
+# WebSockets
+@docs WebSocket
 
 # Using WebSockets
 @docs open, Settings, send, close, closeWith, bytesQueued
@@ -17,8 +17,11 @@ module WebSocket
 -}
 
 import Native.WebSocket
+import Task exposing (Task)
+import Effects exposing (Never)
 
-
+{-|
+-}
 type WebSocket = WebSocket
 
 
