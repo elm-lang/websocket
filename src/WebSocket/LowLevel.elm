@@ -3,6 +3,7 @@ module WebSocket.LowLevel
     , open, Settings
     , send, close, closeWith
     , bytesQueued
+    , BadOpen(..), BadClose(..), BadSend(..)
     )
     where
 {-| Low-level bindings to [the JavaScript API for web sockets][ws]. This is
@@ -19,6 +20,9 @@ these things.
 
 # Using WebSockets
 @docs open, Settings, send, close, closeWith, bytesQueued
+
+# Errors
+@docs BadOpen, BadClose, BadSend
 
 -}
 
