@@ -1,15 +1,21 @@
-module WebSocket
+module WebSocket.LowLevel
     ( WebSocket
-    , Message
     , open, Settings
     , send, close, closeWith
     , bytesQueued
     )
     where
-{-|
+{-| Low-level bindings to [the JavaScript API for web sockets][ws]. This is
+useful primarily for making effect modules like [WebSocket](/WebSocket). So
+if you happen to be the creator of Elixir’s Phoenix framework, and you want
+it to be super easy to use channels, this module will help you make a really
+nice subscription-based API. If you are someone else, you probably do not want
+these things.
 
-# WebSockets and Messages
-@docs WebSocket, Message
+[ws]: https://developer.mozilla.org/en-US/docs/Web/API/WebSocket
+
+# WebSockets
+@docs WebSocket
 
 # Using WebSockets
 @docs open, Settings, send, close, closeWith, bytesQueued
@@ -17,12 +23,21 @@ module WebSocket
 -}
 
 import Native.WebSocket
+import Task exposing (Task)
 
 
+{-| A value representing an open connection to a server. Normally every single
+HTTP request must establish a connection with the server, but here we just set
+it up once and keep using it. This means it is faster to send messages.
+
+There is a request/response pattern for all HTTP requests. Client asks for
+something, server gives some response. With websockets, you can drive messages
+from the server instead.
+-}
 type WebSocket = WebSocket
 
 
-{-|
+{-| Attempt to open a connection to a particular URL.
 -}
 open : String -> Settings -> Task BadOpen WebSocket
 open =
