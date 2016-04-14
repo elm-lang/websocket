@@ -1,101 +1,99 @@
-Elm.Native.WebSocket = {};
-Elm.Native.WebSocket.make = function(localRuntime) {
+var _elm_lang$websocket$Native_WebSocket = function() {
 
-	localRuntime.Native = localRuntime.Native || {};
-	localRuntime.Native.WebSocket = localRuntime.Native.WebSocket || {};
-	if (localRuntime.Native.WebSocket.values)
+function open(url, settings)
+{
+	return _elm_lang$core$Native_Scheduler.nativeBinding(function(callback)
 	{
-		return localRuntime.Native.WebSocket.values;
-	}
+		try
+		{
+			var socket = new WebSocket(url);
+		}
+		catch(err)
+		{
+			return callback(_elm_lang$core$Native_Scheduler.fail({
+				ctor: err instanceof SecurityError ? 'BadSecurity' : 'BadArgs',
+				_0: err.message
+			}));
+		}
 
-	var Maybe = Elm.Maybe.make(localRuntime);
-	var Task = Elm.Native.Task.make(localRuntime);
-	var Utils = Elm.Native.Utils.make(localRuntime);
-
-
-	function open(url, settings)
-	{
-		return Task.asyncFunction(function(callback) {
-			try
-			{
-				var socket = new WebSocket(url);
-			}
-			catch(err)
-			{
-				return callback(Task.fail({
-					ctor: err instanceof SecurityError ? 'BadSecurity' : 'BadArgs',
-					_0: err.message
-				}));
-			}
-
-			socket.addEventListener("message", function(evt) {
-				Task.perform(settings.onMessage(evt.data));
-			});
-
-			socket.addEventListener("close", function(evt) {
-				Task.perform(settings.onClose({
-					code: evt.code,
-					reason: evt.reason,
-					wasClean: evt.wasClean
-				}));
-			});
-
-			socket.addEventListener("open", function(evt) {
-				callback(Task.succeed(socket));
-			});
+		socket.addEventListener("open", function(event) {
+			callback(_elm_lang$core$Native_Scheduler.succeed(socket));
 		});
-	}
 
-	function send(socket, string)
-	{
-		return Task.asyncFunction(function(callback) {
-			var result =
-				socket.readyState === WebSocket.OPEN
-					? Maybe.Nothing
-					: Maybe.Just({ ctor: 'NotOpen' });
-
-			try
-			{
-				socket.send(string);
-			}
-			catch(err)
-			{
-				result = Maybe.Just({ ctor: 'BadString' });
-			}
-
-			callback(Task.succeed(result));
+		socket.addEventListener("message", function(event) {
+			_elm_lang$core$Native_Scheduler.rawSpawn(A2(settings.onMessage, socket, event.data));
 		});
-	}
 
-	function close(code, reason, socket)
-	{
-		return Task.asyncFunction(function(callback) {
-			try
-			{
-				socket.close(code, reason);
-			}
-			catch(err)
-			{
-				return callback(Task.fail({
-					ctor: err instanceof SyntaxError ? 'BadReason' : 'BadCode',
-					_0: err.message
-				}));
-			}
-			callback(Task.succeed(Utils.Tuple0));
+		socket.addEventListener("close", function(event) {
+			_elm_lang$core$Native_Scheduler.rawSpawn(settings.onClose({
+				code: event.code,
+				reason: event.reason,
+				wasClean: event.wasClean
+			}));
 		});
-	}
 
-	function bytesQueued(socket)
+		return function()
+		{
+			if (socket && socket.close)
+			{
+				socket.close();
+			}
+		};
+	});
+}
+
+function send(socket, string)
+{
+	return _elm_lang$core$Native_Scheduler.nativeBinding(function(callback)
 	{
-		return Task.asyncFunction(function(callback) {
-			callback(Task.succeed(socket.bufferedAmount));
-		});
-	}
+		var result =
+			socket.readyState === WebSocket.OPEN
+				? _elm_lang$core$Maybe$Nothing
+				: _elm_lang$core$Maybe$Just({ ctor: 'NotOpen' });
 
-	return localRuntime.Native.WebSocket.values = {
-		open: F2(open),
-		send: F2(send),
-		close: F3(close),
-		bytesQueued: bytesQueued
-	};
+		try
+		{
+			socket.send(string);
+		}
+		catch(err)
+		{
+			result = _elm_lang$core$Maybe$Just({ ctor: 'BadString' });
+		}
+
+		callback(_elm_lang$core$Native_Scheduler.succeed(result));
+	});
+}
+
+function close(code, reason, socket)
+{
+	return _elm_lang$core$Native_Scheduler.nativeBinding(function(callback) {
+		try
+		{
+			socket.close(code, reason);
+		}
+		catch(err)
+		{
+			return callback(_elm_lang$core$Native_Scheduler.fail({
+				ctor: err instanceof SyntaxError ? 'BadReason' : 'BadCode',
+				_0: err.message
+			}));
+		}
+		callback(_elm_lang$core$Native_Scheduler.succeed(_elm_lang$core$Native_Utils.Tuple0));
+	});
+}
+
+function bytesQueued(socket)
+{
+	return _elm_lang$core$Native_Scheduler.nativeBinding(function(callback) {
+		callback(_elm_lang$core$Native_Scheduler.succeed(socket.bufferedAmount));
+	});
+}
+
+return {
+	open: F2(open),
+	send: F2(send),
+	close: F3(close),
+	bytesQueued: bytesQueued
 };
+
+}();
