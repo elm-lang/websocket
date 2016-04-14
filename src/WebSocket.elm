@@ -1,9 +1,8 @@
-effect module WebSocket { command = MyCmd, subscription = MySub }
+effect module WebSocket where { command = MyCmd, subscription = MySub } exposing
   ( send
   , listen
   , keepAlive
   )
-  where
 
 {-| Web sockets make it cheaper to talk to your servers.
 
@@ -178,8 +177,8 @@ onEffects router cmds subs state =
 
           Task.succeed (Dict.insert name (Opening 0 pid) newSockets)
 
-        bothStep name _ _ getNewSockets =
-          getNewSockets
+        bothStep name _ connection getNewSockets =
+          Task.map (Dict.insert name connection) getNewSockets
 
         rightStep name connection getNewSockets =
           closeConnection connection &> getNewSockets
@@ -225,7 +224,7 @@ add : a -> Maybe (List a) -> Maybe (List a)
 add value maybeList =
   case maybeList of
     Nothing ->
-      Just []
+      Just [value]
 
     Just list ->
       Just (value :: list)
