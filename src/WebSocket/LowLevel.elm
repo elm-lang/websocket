@@ -1,11 +1,11 @@
-module WebSocket.LowLevel
-    ( WebSocket
-    , open, Settings
-    , send, close, closeWith
-    , bytesQueued
-    , BadOpen(..), BadClose(..), BadSend(..)
-    )
-    where
+module WebSocket.LowLevel exposing
+  ( WebSocket
+  , open, Settings
+  , send, close, closeWith
+  , bytesQueued
+  , BadOpen(..), BadClose(..), BadSend(..)
+  )
+
 {-| Low-level bindings to [the JavaScript API for web sockets][ws]. This is
 useful primarily for making effect modules like [WebSocket](/WebSocket). So
 if you happen to be the creator of Elixir’s Phoenix framework, and you want
