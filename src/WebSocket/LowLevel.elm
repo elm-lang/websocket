@@ -69,9 +69,17 @@ type alias Settings =
   }
 
 
+{-| Opening the websocket went wrong because:
+
+  1. Maybe you are on an `https://` domain trying to use an `ws://` websocket
+  instead of `wss://`.
+
+  2. You gave an invalid URL or something crazy.
+
+-}
 type BadOpen
-    = BadSecurity
-    | BadArgs
+  = BadSecurity
+  | BadArgs
 
 
 {-| Close a `WebSocket`. If the connection is already closed, it does nothing.
