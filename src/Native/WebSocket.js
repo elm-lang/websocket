@@ -11,7 +11,7 @@ function open(url, settings)
 		catch(err)
 		{
 			return callback(_elm_lang$core$Native_Scheduler.fail({
-				ctor: err instanceof SecurityError ? 'BadSecurity' : 'BadArgs',
+				ctor: err.name == 'SecurityError' ? 'BadSecurity' : 'BadArgs',
 				_0: err.message
 			}));
 		}
@@ -74,7 +74,7 @@ function close(code, reason, socket)
 		catch(err)
 		{
 			return callback(_elm_lang$core$Native_Scheduler.fail({
-				ctor: err instanceof SyntaxError ? 'BadReason' : 'BadCode',
+				ctor: err.name == 'SyntaxError' ? 'BadReason' : 'BadCode',
 				_0: err.message
 			}));
 		}
