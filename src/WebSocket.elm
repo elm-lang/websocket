@@ -265,7 +265,15 @@ onSelfMsg router selfMsg state =
           Task.succeed (updateSocket name (Opening 0 pid) state)
 
     GoodOpen name socket ->
-      Task.succeed (updateSocket name (Connected socket) state)
+      case Dict.get name state.queues of
+        Nothing ->
+          Task.succeed (updateSocket name (Connected socket) state)
+
+        Just messages ->
+          List.foldl
+            (\msg task -> WS.send socket msg &> task)
+            (Task.succeed (removeQueue name (updateSocket name (Connected socket) state)))
+            messages
 
     BadOpen name ->
       case Dict.get name state.sockets of
@@ -285,6 +293,11 @@ onSelfMsg router selfMsg state =
 updateSocket : String -> Connection -> State msg -> State msg
 updateSocket name connection state =
   { state | sockets = Dict.insert name connection state.sockets }
+
+
+removeQueue : String -> State msg -> State msg
+removeQueue name state =
+  { state | queues = Dict.remove name state.queues }
 
 
 
