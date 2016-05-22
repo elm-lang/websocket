@@ -7,7 +7,7 @@ module WebSocket.LowLevel exposing
   )
 
 {-| Low-level bindings to [the JavaScript API for web sockets][ws]. This is
-useful primarily for making effect modules like [WebSocket](/WebSocket). So
+useful primarily for making effect modules like [WebSocket](WebSocket). So
 if you happen to be the creator of Elixir’s Phoenix framework, and you want
 it to be super easy to use channels, this module will help you make a really
 nice subscription-based API. If you are someone else, you probably do not want
