@@ -7,6 +7,7 @@ function open(url, settings)
 		try
 		{
 			var socket = new WebSocket(url);
+			socket.elm_web_socket = true;
 		}
 		catch(err)
 		{
