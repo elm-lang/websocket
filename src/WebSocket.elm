@@ -146,7 +146,8 @@ init =
 -- HANDLE APP MESSAGES
 
 
-(&>) t1 t2 = Task.andThen t1 (\_ -> t2)
+(&>) t1 t2 =
+  Task.andThen (\_ -> t2) t1
 
 
 onEffects
@@ -170,25 +171,23 @@ onEffects router cmds subs state =
 
         leftStep name _ getNewSockets =
           getNewSockets
-            `Task.andThen` \newSockets ->
-
-          attemptOpen router 0 name
-            `Task.andThen` \pid ->
-
-          Task.succeed (Dict.insert name (Opening 0 pid) newSockets)
+            |> Task.andThen (\newSockets -> attemptOpen router 0 name
+            |> Task.andThen (\pid -> Task.succeed (Dict.insert name (Opening 0 pid) newSockets)))
 
         bothStep name _ connection getNewSockets =
           Task.map (Dict.insert name connection) getNewSockets
 
         rightStep name connection getNewSockets =
           closeConnection connection &> getNewSockets
-      in
-        Dict.merge leftStep bothStep rightStep newEntries state.sockets (Task.succeed Dict.empty)
-          `Task.andThen` \newSockets ->
 
-        Task.succeed (State newSockets newQueues newSubs)
+        collectNewSockets =
+          Dict.merge leftStep bothStep rightStep newEntries state.sockets (Task.succeed Dict.empty)
+      in
+        collectNewSockets
+          |> Task.andThen (\newSockets -> Task.succeed (State newSockets newQueues newSubs))
   in
-    sendMessagesGetNewQueues `Task.andThen` cleanup
+    sendMessagesGetNewQueues
+      |> Task.andThen cleanup
 
 
 sendMessagesHelp : List (MyCmd msg) -> SocketsDict -> QueuesDict -> Task x QueuesDict
@@ -260,9 +259,7 @@ onSelfMsg router selfMsg state =
 
         Just _ ->
           attemptOpen router 0 name
-            `Task.andThen` \pid ->
-
-          Task.succeed (updateSocket name (Opening 0 pid) state)
+            |> Task.andThen (\pid -> Task.succeed (updateSocket name (Opening 0 pid) state))
 
     GoodOpen name socket ->
       case Dict.get name state.queues of
@@ -282,9 +279,7 @@ onSelfMsg router selfMsg state =
 
         Just (Opening n _) ->
           attemptOpen router (n + 1) name
-            `Task.andThen` \pid ->
-
-          Task.succeed (updateSocket name (Opening (n + 1) pid) state)
+            |> Task.andThen (\pid -> Task.succeed (updateSocket name (Opening (n + 1) pid) state))
 
         Just (Connected _) ->
           Task.succeed state
@@ -314,8 +309,9 @@ attemptOpen router backoff name =
       Platform.sendToSelf router (BadOpen name)
 
     actuallyAttemptOpen =
-      (open name router `Task.andThen` goodOpen)
-        `Task.onError` badOpen
+      open name router
+        |> Task.andThen goodOpen
+        |> Task.onError badOpen
   in
     Process.spawn (after backoff &> actuallyAttemptOpen)
 
