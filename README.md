@@ -8,8 +8,8 @@ Web sockets make it cheaper to talk to your servers.
 Connecting to a server takes some time, so with web sockets, you make that
 connection once and then keep using. The major benefits of this are:
 
-  1. It faster to send messages. No need to do a bunch of work for every single
-  message.
+  1. It is faster to send messages. No need to do a bunch of work for every
+  single message.
 
   2. The server can push messages to you. With normal HTTP you would have to
   keep *asking* for changes, but a web socket, the server can talk to you
