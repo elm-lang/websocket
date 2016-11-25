@@ -16,7 +16,7 @@ function open(url, settings)
 	{
 		try
 		{
-      var socket = new WebSocket(getEndpointURL(url));
+			var socket = new WebSocket(getEndpointURL(url));
 			socket.elm_web_socket = true;
 		}
 		catch(err)
