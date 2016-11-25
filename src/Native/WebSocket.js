@@ -1,12 +1,22 @@
 var _elm_lang$websocket$Native_WebSocket = function() {
 
+function getProtocol(){ return location.protocol.match(/^https/) ? "wss" : "ws" }
+
+function getEndpointURL(uri)
+{
+  if(uri.charAt(0) !== "/"){ return uri; }
+  if(uri.charAt(1) === "/"){ return getProtocol() + ':' + uri; }
+
+  return getProtocol() + '://' + location.host + uri;
+}
+
 function open(url, settings)
 {
 	return _elm_lang$core$Native_Scheduler.nativeBinding(function(callback)
 	{
 		try
 		{
-			var socket = new WebSocket(url);
+			var socket = new WebSocket(getEndpointURL(url));
 			socket.elm_web_socket = true;
 		}
 		catch(err)
