@@ -27,7 +27,6 @@ many unique connections to the same endpoint, you need a different library.
 import Dict
 import Process
 import Task exposing (Task)
-import Time exposing (Time)
 import WebSocket.LowLevel as WS
 
 
@@ -115,17 +114,12 @@ subMap func sub =
 
 type alias State msg =
   { sockets : SocketsDict
-  , queues : QueuesDict
   , subs : SubsDict msg
   }
 
 
 type alias SocketsDict =
   Dict.Dict String Connection
-
-
-type alias QueuesDict =
-  Dict.Dict String (List String)
 
 
 type alias SubsDict msg =
@@ -139,7 +133,7 @@ type Connection
 
 init : Task Never (State msg)
 init =
-  Task.succeed (State Dict.empty Dict.empty Dict.empty)
+  Task.succeed (State Dict.empty Dict.empty)
 
 
 
@@ -158,52 +152,29 @@ onEffects
   -> Task Never (State msg)
 onEffects router cmds subs state =
   let
-    sendMessagesGetNewQueues =
-      sendMessagesHelp cmds state.sockets state.queues
-
     newSubs =
       buildSubDict subs Dict.empty
 
-    cleanup newQueues =
-      let
-        newEntries =
-          Dict.union newQueues (Dict.map (\k v -> []) newSubs)
+    newEntries =
+      Dict.map (\k v -> []) newSubs
 
-        leftStep name _ getNewSockets =
-          getNewSockets
-            |> Task.andThen (\newSockets -> attemptOpen router 0 name
-            |> Task.andThen (\pid -> Task.succeed (Dict.insert name (Opening 0 pid) newSockets)))
+    leftStep name _ getNewSockets =
+      getNewSockets
+        |> Task.andThen (\newSockets -> attemptOpen router 0 name
+        |> Task.andThen (\pid -> Task.succeed (Dict.insert name (Opening 0 pid) newSockets)))
 
-        bothStep name _ connection getNewSockets =
-          Task.map (Dict.insert name connection) getNewSockets
+    bothStep name _ connection getNewSockets =
+      Task.map (Dict.insert name connection) getNewSockets
 
-        rightStep name connection getNewSockets =
-          closeConnection connection &> getNewSockets
+    rightStep name connection getNewSockets =
+      closeConnection connection &> getNewSockets
 
-        collectNewSockets =
-          Dict.merge leftStep bothStep rightStep newEntries state.sockets (Task.succeed Dict.empty)
-      in
-        collectNewSockets
-          |> Task.andThen (\newSockets -> Task.succeed (State newSockets newQueues newSubs))
+    collectNewSockets =
+      Dict.merge leftStep bothStep rightStep newEntries state.sockets (Task.succeed Dict.empty)
   in
-    sendMessagesGetNewQueues
-      |> Task.andThen cleanup
+    collectNewSockets
+      |> Task.andThen (\newSockets -> Task.succeed (State newSockets newSubs))
 
-
-sendMessagesHelp : List (MyCmd msg) -> SocketsDict -> QueuesDict -> Task x QueuesDict
-sendMessagesHelp cmds socketsDict queuesDict =
-  case cmds of
-    [] ->
-      Task.succeed queuesDict
-
-    Send name msg :: rest ->
-      case Dict.get name socketsDict of
-        Just (Connected socket) ->
-          WS.send socket msg
-            &> sendMessagesHelp rest socketsDict queuesDict
-
-        _ ->
-          sendMessagesHelp rest socketsDict (Dict.update name (add msg) queuesDict)
 
 
 buildSubDict : List (MySub msg) -> SubsDict msg -> SubsDict msg
@@ -262,15 +233,7 @@ onSelfMsg router selfMsg state =
             |> Task.andThen (\pid -> Task.succeed (updateSocket name (Opening 0 pid) state))
 
     GoodOpen name socket ->
-      case Dict.get name state.queues of
-        Nothing ->
-          Task.succeed (updateSocket name (Connected socket) state)
-
-        Just messages ->
-          List.foldl
-            (\msg task -> WS.send socket msg &> task)
-            (Task.succeed (removeQueue name (updateSocket name (Connected socket) state)))
-            messages
+        Task.succeed state
 
     BadOpen name ->
       case Dict.get name state.sockets of
@@ -288,11 +251,6 @@ onSelfMsg router selfMsg state =
 updateSocket : String -> Connection -> State msg -> State msg
 updateSocket name connection state =
   { state | sockets = Dict.insert name connection state.sockets }
-
-
-removeQueue : String -> State msg -> State msg
-removeQueue name state =
-  { state | queues = Dict.remove name state.queues }
 
 
 
