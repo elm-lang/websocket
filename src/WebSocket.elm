@@ -1,10 +1,8 @@
 effect module WebSocket where { command = MyCmd, subscription = MySub } exposing
   ( send
   , listen
-  , connect
   , onOpen
   , onClose
-  , Error(..)
   )
 
 {-| Web sockets make it cheaper to talk to your servers.
@@ -23,7 +21,7 @@ The API here attempts to cover the typical usage scenarios, but if you need
 many unique connections to the same endpoint, you need a different library.
 
 # Web Sockets
-@docs connect, listen, send, onOpen, onClose, Error
+@docs listen, onOpen, onClose, send
 
 -}
 
@@ -39,19 +37,6 @@ import WebSocket.LowLevel as WS
 
 type MyCmd msg
   = Send String String
-  | Connect String
-
-
--- ERRORS
-
-
-{-| The `connect` and `send` functions may fail for a variety of reasons.
-In each case, the browser will provide a string with additional information.
--}
-type Error
-    = ConnectFailed
-    | SendFailed
-
 
 
 {-| Send a message to a particular address. You might say something like this:
@@ -67,26 +52,10 @@ send url message =
   command (Send url message)
 
 
-{-| Attempt to connect to a particular address. You might say something like this:
-
-    connect "ws://echo.websocket.org"
-
-**Note:** It is important that you are also subscribed to this address with
-`listen` if you want to handle messages from the connection!
--}
-connect : String -> Cmd msg
-connect url =
-  command (Connect url)
-
-
 cmdMap : (a -> b) -> MyCmd a -> MyCmd b
-cmdMap _ cmd =
-  case cmd of
-    Send url msg ->
-      Send url msg
+cmdMap _ (Send url msg) =
+  Send url msg
 
-    Connect url ->
-      Connect url
 
 
 -- SUBSCRIPTIONS
@@ -104,6 +73,8 @@ like this:
     subscriptions model =
       listen "ws://echo.websocket.org" Echo
 
+**Note:** If the connection goes down, the effect manager tries to reconnect
+with an exponential backoff strategy.
 -}
 listen : String -> (String -> msg) -> Sub msg
 listen url tagger =
@@ -162,7 +133,7 @@ type alias SubsDict msg =
 
 
 type Connection
-  = Opening Process.Id
+  = Opening Int Process.Id
   | Connected WS.WebSocket
 
 
@@ -193,45 +164,22 @@ onEffects router cmds subs state =
     newEntries =
       buildEntriesDict subs Dict.empty
 
-    leftStep name _ getNewSockets =
+    leftStep category _ getNewSockets =
       getNewSockets
+        |> Task.andThen (\newSockets -> attemptOpen router 0 category
+        |> Task.andThen (\pid -> Task.succeed (Dict.insert category (Opening 0 pid) newSockets)))
 
-    bothStep name _ connection getNewSockets =
-      Task.map (Dict.insert name connection) getNewSockets
+    bothStep category _ connection getNewSockets =
+      Task.map (Dict.insert category connection) getNewSockets
 
-    rightStep name connection getNewSockets =
+    rightStep category connection getNewSockets =
       closeConnection connection &> getNewSockets
+
+    collectNewSockets =
+      Dict.merge leftStep bothStep rightStep newEntries state.sockets (Task.succeed Dict.empty)
   in
-    Dict.merge leftStep bothStep rightStep newEntries state.sockets (Task.succeed Dict.empty)
-      |> Task.andThen (\newSockets -> cmdHelp router cmds newSockets)
+    collectNewSockets
       |> Task.andThen (\newSockets -> Task.succeed (State newSockets newSubs))
-
-
-cmdHelp : Platform.Router msg Msg -> List (MyCmd msg) -> SocketsDict -> Task Never SocketsDict
-cmdHelp router cmds socketsDict =
-  case cmds of
-    [] ->
-      Task.succeed socketsDict
-
-    Send name msg :: rest ->
-      case Dict.get name socketsDict of
-        Just (Connected socket) ->
-          WS.send socket msg
-            &> cmdHelp router rest socketsDict
-
-        _ ->
-          Task.succeed socketsDict
-          --Task.fail SendFailed -- Not connected
-
-    Connect name :: rest ->
-      case Dict.get name socketsDict of
-        Just (Connected _) ->
-          Task.succeed socketsDict
-          --Task.fail ConnectFailed -- already connected
-
-        _ ->
-            attemptOpen router name
-            |> Task.andThen (\pid -> Task.succeed (Dict.insert name (Opening pid) socketsDict))
 
 
 
@@ -277,7 +225,8 @@ set value maybeDict =
 type Msg
   = Receive String String
   | Die String
-  | Open String WS.WebSocket
+  | GoodOpen String WS.WebSocket
+  | BadOpen String
 
 
 onSelfMsg : Platform.Router msg Msg -> Msg -> State msg -> Task Never (State msg)
@@ -298,23 +247,19 @@ onSelfMsg router selfMsg state =
         Nothing ->
           Task.succeed state
 
-        Just conn ->
+        Just _ ->
           let
             sends =
-              case conn of
-                Connected _ ->
-                  Dict.get "onClose" state.subs
-                    |> Maybe.withDefault Dict.empty
-                    |> Dict.toList
-                    |> List.map (\(_, tagger) -> Platform.sendToApp router (tagger name))
-
-                Opening _ -> -- Don't report close events if we never actually connected
-                    []
+              Dict.get "onClose" state.subs
+                |> Maybe.withDefault Dict.empty
+                |> Dict.toList
+                |> List.map (\(_, tagger) -> Platform.sendToApp router (tagger name))
           in
-            Task.sequence sends &> Task.succeed state
-              |> Task.andThen (\_ -> Task.succeed (removeSocket name state))
+            Task.sequence sends
+              |> Task.andThen (\_ -> attemptOpen router 0 name)
+              |> Task.andThen (\pid -> Task.succeed (updateSocket name (Opening 0 pid) state))
 
-    Open name socket ->
+    GoodOpen name socket ->
       let
         sends =
           Dict.get "onOpen" state.subs
@@ -323,12 +268,18 @@ onSelfMsg router selfMsg state =
             |> List.map (\(_, tagger) -> Platform.sendToApp router (tagger name))
       in
         Task.sequence sends &> Task.succeed state
-            |> Task.andThen (\_ -> Task.succeed (updateSocket name (Connected socket) state))
 
+    BadOpen name ->
+      case Dict.get name state.sockets of
+        Nothing ->
+          Task.succeed state
 
-removeSocket : String -> State msg -> State msg
-removeSocket name state =
-  { state | sockets = Dict.remove name state.sockets }
+        Just (Opening n _) ->
+          attemptOpen router (n + 1) name
+            |> Task.andThen (\pid -> Task.succeed (updateSocket name (Opening (n + 1) pid) state))
+
+        Just (Connected _) ->
+          Task.succeed state
 
 
 updateSocket : String -> Connection -> State msg -> State msg
@@ -336,21 +287,25 @@ updateSocket name connection state =
   { state | sockets = Dict.insert name connection state.sockets }
 
 
-attemptOpen : Platform.Router msg Msg -> String -> Task x Process.Id
-attemptOpen router name =
+
+-- OPENING WEBSOCKETS WITH EXPONENTIAL BACKOFF
+
+
+attemptOpen : Platform.Router msg Msg -> Int -> String -> Task x Process.Id
+attemptOpen router backoff name =
   let
     goodOpen ws =
-      Platform.sendToSelf router (Open name ws)
+      Platform.sendToSelf router (GoodOpen name ws)
 
     badOpen _ =
-      Platform.sendToSelf router (Die name)
+      Platform.sendToSelf router (BadOpen name)
 
     actuallyAttemptOpen =
       open name router
         |> Task.andThen goodOpen
         |> Task.onError badOpen
   in
-    Process.spawn actuallyAttemptOpen
+    Process.spawn (after backoff &> actuallyAttemptOpen)
 
 
 open : String -> Platform.Router msg Msg -> Task WS.BadOpen WS.WebSocket
@@ -361,6 +316,15 @@ open name router =
     }
 
 
+after : Int -> Task x ()
+after backoff =
+  if backoff < 1 then
+    Task.succeed ()
+
+  else
+    Process.sleep (toFloat (10 * 2 ^ backoff))
+
+
 
 -- CLOSE CONNECTIONS
 
@@ -368,7 +332,7 @@ open name router =
 closeConnection : Connection -> Task x ()
 closeConnection connection =
   case connection of
-    Opening pid ->
+    Opening _ pid ->
       Process.kill pid
 
     Connected socket ->
