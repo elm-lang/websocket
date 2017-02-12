@@ -27,7 +27,6 @@ many unique connections to the same endpoint, you need a different library.
 import Dict
 import Process
 import Task exposing (Task)
-import Time exposing (Time)
 import WebSocket.LowLevel as WS
 
 
@@ -257,9 +256,12 @@ onSelfMsg router selfMsg state =
         Nothing ->
           Task.succeed state
 
-        Just _ ->
+        Just (Connected _) ->
           attemptOpen router 0 name
             |> Task.andThen (\pid -> Task.succeed (updateSocket name (Opening 0 pid) state))
+
+        Just (Opening n _) ->
+            retryConnection router n name state
 
     GoodOpen name socket ->
       case Dict.get name state.queues of
@@ -278,11 +280,21 @@ onSelfMsg router selfMsg state =
           Task.succeed state
 
         Just (Opening n _) ->
-          attemptOpen router (n + 1) name
-            |> Task.andThen (\pid -> Task.succeed (updateSocket name (Opening (n + 1) pid) state))
+            retryConnection router n name state
 
         Just (Connected _) ->
           Task.succeed state
+
+
+retryConnection
+    : Platform.Router msg Msg
+    -> Int
+    -> String
+    -> State msg
+    -> Task x (State msg)
+retryConnection router n name state =
+  attemptOpen router (n + 1) name
+    |> Task.andThen (\pid -> Task.succeed (updateSocket name (Opening (n + 1) pid) state))
 
 
 updateSocket : String -> Connection -> State msg -> State msg
