@@ -1,7 +1,6 @@
 effect module WebSocket where { command = MyCmd, subscription = MySub } exposing
   ( send
   , listen
-  , keepAlive
   )
 
 {-| Web sockets make it cheaper to talk to your servers.
@@ -20,7 +19,7 @@ The API here attempts to cover the typical usage scenarios, but if you need
 many unique connections to the same endpoint, you need a different library.
 
 # Web Sockets
-@docs listen, keepAlive, send
+@docs listen, send
 
 -}
 
@@ -62,7 +61,6 @@ cmdMap _ (Send url msg) =
 
 type MySub msg
   = Listen String (String -> msg)
-  | KeepAlive String
 
 
 {-| Subscribe to any incoming messages on a websocket. You might say something
@@ -82,30 +80,11 @@ listen url tagger =
   subscription (Listen url tagger)
 
 
-{-| Keep a connection alive, but do not report any messages. This is useful
-for keeping a connection open for when you only need to `send` messages. So
-you might say something like this:
-
-    subscriptions model =
-      keepAlive "ws://echo.websocket.org"
-
-**Note:** If the connection goes down, the effect manager tries to reconnect
-with an exponential backoff strategy. Any messages you try to `send` while the
-connection is down are queued and will be sent as soon as possible.
--}
-keepAlive : String -> Sub msg
-keepAlive url =
-  subscription (KeepAlive url)
-
-
 subMap : (a -> b) -> MySub a -> MySub b
 subMap func sub =
   case sub of
     Listen url tagger ->
       Listen url (tagger >> func)
-
-    KeepAlive url ->
-      KeepAlive url
 
 
 
@@ -185,9 +164,6 @@ buildSubDict subs dict =
 
     Listen name tagger :: rest ->
       buildSubDict rest (Dict.update name (add tagger) dict)
-
-    KeepAlive name :: rest ->
-      buildSubDict rest (Dict.update name (Just << Maybe.withDefault []) dict)
 
 
 add : a -> Maybe (List a) -> Maybe (List a)
