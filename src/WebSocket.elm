@@ -60,7 +60,7 @@ cmdMap _ (Send url msg) =
 
 
 type MySub msg
-  = Listen String (String -> msg)
+  = MySub String String (String -> msg)
 
 
 {-| Subscribe to any incoming messages on a websocket. You might say something
@@ -77,14 +77,14 @@ connection is down are queued and will be sent as soon as possible.
 -}
 listen : String -> (String -> msg) -> Sub msg
 listen url tagger =
-  subscription (Listen url tagger)
+  subscription (MySub "listen" url tagger)
 
 
 subMap : (a -> b) -> MySub a -> MySub b
 subMap func sub =
   case sub of
-    Listen url tagger ->
-      Listen url (tagger >> func)
+    MySub category url tagger ->
+      MySub category url (tagger >> func)
 
 
 
@@ -102,7 +102,7 @@ type alias SocketsDict =
 
 
 type alias SubsDict msg =
-  Dict.Dict String (List (String -> msg))
+  Dict.Dict String (Dict.Dict String (String -> msg))
 
 
 type Connection
@@ -135,17 +135,17 @@ onEffects router cmds subs state =
       buildSubDict subs Dict.empty
 
     newEntries =
-      Dict.map (\k v -> []) newSubs
+      buildEntriesDict subs Dict.empty
 
-    leftStep name _ getNewSockets =
+    leftStep category _ getNewSockets =
       getNewSockets
-        |> Task.andThen (\newSockets -> attemptOpen router 0 name
-        |> Task.andThen (\pid -> Task.succeed (Dict.insert name (Opening 0 pid) newSockets)))
+        |> Task.andThen (\newSockets -> attemptOpen router 0 category
+        |> Task.andThen (\pid -> Task.succeed (Dict.insert category (Opening 0 pid) newSockets)))
 
-    bothStep name _ connection getNewSockets =
-      Task.map (Dict.insert name connection) getNewSockets
+    bothStep category _ connection getNewSockets =
+      Task.map (Dict.insert category connection) getNewSockets
 
-    rightStep name connection getNewSockets =
+    rightStep category connection getNewSockets =
       closeConnection connection &> getNewSockets
 
     collectNewSockets =
@@ -162,18 +162,33 @@ buildSubDict subs dict =
     [] ->
       dict
 
-    Listen name tagger :: rest ->
-      buildSubDict rest (Dict.update name (add tagger) dict)
+    MySub category name tagger :: rest ->
+      buildSubDict rest (Dict.update category (set (name, tagger)) dict)
 
 
-add : a -> Maybe (List a) -> Maybe (List a)
-add value maybeList =
-  case maybeList of
+buildEntriesDict : List (MySub msg) -> Dict.Dict String (List a) -> Dict.Dict String (List a)
+buildEntriesDict subs dict =
+  case subs of
+    [] ->
+      dict
+
+    MySub category name tagger :: rest ->
+      case category of
+        "listen" ->
+          buildEntriesDict rest (Dict.update name (Just << Maybe.withDefault []) dict)
+
+        _ ->
+          buildEntriesDict rest dict
+
+
+set : (comparable, b) -> Maybe (Dict.Dict comparable b) -> Maybe (Dict.Dict comparable b)
+set value maybeDict =
+  case maybeDict of
     Nothing ->
-      Just [value]
+      Just (Dict.fromList [value])
 
     Just list ->
-      Just (value :: list)
+      Just (Dict.fromList [value])
 
 
 
@@ -193,9 +208,10 @@ onSelfMsg router selfMsg state =
     Receive name str ->
       let
         sends =
-          Dict.get name state.subs
-            |> Maybe.withDefault []
-            |> List.map (\tagger -> Platform.sendToApp router (tagger str))
+          Dict.get "listen" state.subs
+            |> Maybe.withDefault Dict.empty
+            |> Dict.toList
+            |> List.map (\(_, tagger) -> Platform.sendToApp router (tagger str))
       in
         Task.sequence sends &> Task.succeed state
 
