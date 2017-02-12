@@ -42,8 +42,8 @@ type MyCmd msg
     send "ws://echo.websocket.org" "Hello!"
 
 **Note:** It is important that you are also subscribed to this address with
-`listen` or `keepAlive`. If you are not, the web socket will be created to
-send one message and then closed. Not good!
+`listen`. If you are not, the web socket will be created to send one message
+and then closed. Not good!
 -}
 send : String -> String -> Cmd msg
 send url message =
@@ -72,8 +72,7 @@ like this:
       listen "ws://echo.websocket.org" Echo
 
 **Note:** If the connection goes down, the effect manager tries to reconnect
-with an exponential backoff strategy. Any messages you try to `send` while the
-connection is down are queued and will be sent as soon as possible.
+with an exponential backoff strategy.
 -}
 listen : String -> (String -> msg) -> Sub msg
 listen url tagger =
