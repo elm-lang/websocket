@@ -178,9 +178,26 @@ onEffects router cmds subs state =
     collectNewSockets =
       Dict.merge leftStep bothStep rightStep newEntries state.sockets (Task.succeed Dict.empty)
   in
-    collectNewSockets
+    cmdHelp router cmds state.sockets
+      &> collectNewSockets
       |> Task.andThen (\newSockets -> Task.succeed (State newSockets newSubs))
 
+
+cmdHelp : Platform.Router msg Msg -> List (MyCmd msg) -> SocketsDict -> Task Never SocketsDict
+cmdHelp router cmds socketsDict =
+  case cmds of
+    [] ->
+      Task.succeed socketsDict
+
+    Send name msg :: rest ->
+      case Dict.get name socketsDict of
+        Just (Connected socket) ->
+          WS.send socket msg
+            &> cmdHelp router rest socketsDict
+
+        _ ->
+          -- TODO: Since messages are no longer queued, this probably shouldn't just succeed
+          Task.succeed socketsDict
 
 
 buildSubDict : List (MySub msg) -> SubsDict msg -> SubsDict msg
