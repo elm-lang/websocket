@@ -247,7 +247,7 @@ onSelfMsg router selfMsg state =
         Nothing ->
           Task.succeed state
 
-        Just _ ->
+        Just (Connected _) ->
           let
             sends =
               Dict.get "onClose" state.subs
@@ -256,8 +256,11 @@ onSelfMsg router selfMsg state =
                 |> List.map (\(_, tagger) -> Platform.sendToApp router (tagger name))
           in
             Task.sequence sends
-              |> Task.andThen (\_ -> attemptOpen router 0 name)
+              &> attemptOpen router 0 name
               |> Task.andThen (\pid -> Task.succeed (updateSocket name (Opening 0 pid) state))
+
+        Just (Opening n _) ->
+          retryConnection router n name state
 
     GoodOpen name socket ->
       let
@@ -267,7 +270,8 @@ onSelfMsg router selfMsg state =
             |> Dict.toList
             |> List.map (\(_, tagger) -> Platform.sendToApp router (tagger name))
       in
-        Task.sequence sends &> Task.succeed state
+        Task.sequence sends
+          &> Task.succeed (updateSocket name (Connected socket) state)
 
     BadOpen name ->
       case Dict.get name state.sockets of
@@ -275,11 +279,21 @@ onSelfMsg router selfMsg state =
           Task.succeed state
 
         Just (Opening n _) ->
-          attemptOpen router (n + 1) name
-            |> Task.andThen (\pid -> Task.succeed (updateSocket name (Opening (n + 1) pid) state))
+          retryConnection router n name state
 
         Just (Connected _) ->
           Task.succeed state
+
+
+retryConnection
+    : Platform.Router msg Msg
+    -> Int
+    -> String
+    -> State msg
+    -> Task x (State msg)
+retryConnection router n name state =
+  attemptOpen router (n + 1) name
+    |> Task.andThen (\pid -> Task.succeed (updateSocket name (Opening (n + 1) pid) state))
 
 
 updateSocket : String -> Connection -> State msg -> State msg
