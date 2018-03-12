@@ -26,7 +26,7 @@ these things.
 
 -}
 
-import Native.WebSocket
+import Elm.Kernel.WebSocket
 import Task exposing (Task)
 
 
@@ -45,7 +45,7 @@ type WebSocket = WebSocket
 -}
 open : String -> Settings -> Task BadOpen WebSocket
 open =
-  Native.WebSocket.open
+  Elm.Kernel.WebSocket.open
 
 
 {-| The settings describe how a `WebSocket` works as long as it is still open.
@@ -106,7 +106,7 @@ In addition to providing the `WebSocket` you want to close, you must provide:
 -}
 closeWith : Int -> String -> WebSocket -> Task x (Maybe BadClose)
 closeWith =
-  Native.WebSocket.close
+  Elm.Kernel.WebSocket.close
 
 
 {-| It is possible to provide invalid codes or reasons for closing a
@@ -125,7 +125,7 @@ task.
 -}
 send : WebSocket -> String -> Task x (Maybe BadSend)
 send =
-  Native.WebSocket.send
+  Elm.Kernel.WebSocket.send
 
 
 {-| There are a few ways a send can go wrong. The send function will ultimately
@@ -143,5 +143,5 @@ pile up on the queue endlessly.
 -}
 bytesQueued : WebSocket -> Task x Int
 bytesQueued =
-  Native.WebSocket.bytesQueued
+  Elm.Kernel.WebSocket.bytesQueued
 

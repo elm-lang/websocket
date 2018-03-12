@@ -27,7 +27,6 @@ many unique connections to the same endpoint, you need a different library.
 import Dict
 import Process
 import Task exposing (Task)
-import Time exposing (Time)
 import WebSocket.LowLevel as WS
 
 
@@ -146,10 +145,6 @@ init =
 -- HANDLE APP MESSAGES
 
 
-(&>) t1 t2 =
-  Task.andThen (\_ -> t2) t1
-
-
 onEffects
   : Platform.Router msg Msg
   -> List (MyCmd msg)
@@ -178,7 +173,8 @@ onEffects router cmds subs state =
           Task.map (Dict.insert name connection) getNewSockets
 
         rightStep name connection getNewSockets =
-          closeConnection connection &> getNewSockets
+          closeConnection connection
+            |> Task.andThen (\_ -> getNewSockets)
 
         collectNewSockets =
           Dict.merge leftStep bothStep rightStep newEntries state.sockets (Task.succeed Dict.empty)
@@ -200,7 +196,7 @@ sendMessagesHelp cmds socketsDict queuesDict =
       case Dict.get name socketsDict of
         Just (Connected socket) ->
           WS.send socket msg
-            &> sendMessagesHelp rest socketsDict queuesDict
+            |> Task.andThen (\_ -> sendMessagesHelp rest socketsDict queuesDict)
 
         _ ->
           sendMessagesHelp rest socketsDict (Dict.update name (add msg) queuesDict)
@@ -250,7 +246,8 @@ onSelfMsg router selfMsg state =
             |> Maybe.withDefault []
             |> List.map (\tagger -> Platform.sendToApp router (tagger str))
       in
-        Task.sequence sends &> Task.succeed state
+        Task.sequence sends
+          |> Task.andThen (\_ -> Task.succeed state)
 
     Die name ->
       case Dict.get name state.sockets of
@@ -268,7 +265,7 @@ onSelfMsg router selfMsg state =
 
         Just messages ->
           List.foldl
-            (\msg task -> WS.send socket msg &> task)
+            (\msg task -> WS.send socket msg |> Task.andThen (\_ -> task))
             (Task.succeed (removeQueue name (updateSocket name (Connected socket) state)))
             messages
 
@@ -313,7 +310,7 @@ attemptOpen router backoff name =
         |> Task.andThen goodOpen
         |> Task.onError badOpen
   in
-    Process.spawn (after backoff &> actuallyAttemptOpen)
+    Process.spawn (after backoff |> Task.andThen (\_ -> actuallyAttemptOpen))
 
 
 open : String -> Platform.Router msg Msg -> Task WS.BadOpen WS.WebSocket
