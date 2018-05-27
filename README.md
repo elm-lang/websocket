@@ -18,5 +18,5 @@ connection once and then keep using. The major benefits of this are:
 
 ## Learn
 
-The best way to learn how to use this library is to read [guide.elm-lang.org](http://guide.elm-lang.org/), particularly the section on [The Elm Architecture](http://guide.elm-lang.org/architecture/index.html).
+The best way to learn how to use this library is to read [guide.elm-lang.org](https://guide.elm-lang.org/), particularly the section on [The Elm Architecture](https://guide.elm-lang.org/architecture/index.html).
 
