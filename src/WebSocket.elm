@@ -48,7 +48,7 @@ send one message and then closed. Not good!
 -}
 send : String -> String -> Cmd msg
 send url message =
-  command (Send url message)
+  command (Send (checkProtocol url) message)
 
 
 cmdMap : (a -> b) -> MyCmd a -> MyCmd b
@@ -79,7 +79,7 @@ connection is down are queued and will be sent as soon as possible.
 -}
 listen : String -> (String -> msg) -> Sub msg
 listen url tagger =
-  subscription (Listen url tagger)
+  subscription (Listen (checkProtocol url) tagger)
 
 
 {-| Keep a connection alive, but do not report any messages. This is useful
@@ -95,7 +95,7 @@ connection is down are queued and will be sent as soon as possible.
 -}
 keepAlive : String -> Sub msg
 keepAlive url =
-  subscription (KeepAlive url)
+  subscription (KeepAlive (checkProtocol url))
 
 
 subMap : (a -> b) -> MySub a -> MySub b
@@ -342,3 +342,14 @@ closeConnection connection =
 
     Connected socket ->
       WS.close socket
+
+
+-- DEVELOPER FEEDBACK
+
+checkProtocol : String -> String
+checkProtocol url =
+  if String.left 5 url == "ws://" || String.left 6 url == "wss://" then
+      url
+  else
+      Debug.log ("WARNING: Websocket URL does not start with ws:// or wss://."
+        ++ " You probably want to change that.") url
